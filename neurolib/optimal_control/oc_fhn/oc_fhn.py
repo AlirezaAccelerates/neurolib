@@ -446,6 +446,10 @@ class OcFhn:
             if self.validate_per_step:  # if cost is computed for M_validation realizations in every step
                 for m in range(self.M):
                     self.simulate_forward()
+                    if np.isnan(self.get_xs()).any():
+                        print("diverging model output in gradient computation, repeat ")
+                        # m -= 1
+                        continue
                     grad_m[m, :] = self.compute_gradient()
                 cost = self.compute_cost_validation()
             else:
@@ -457,13 +461,12 @@ class OcFhn:
                 cost = cost_m / self.M
 
             grad = np.mean(grad_m, axis=0)
-
             if i in self.print_array:
                 print(f"Mean cost in iteration %s: %s" % (i, cost))
             self.add_cost_to_history(cost)
 
             control0 = self.control
-            step = self.get_step_noisy(grad)
+            step = self.step_size_noisy(-grad)
 
             self.control = control0 + step * (-grad)
             self.update_input()
@@ -481,37 +484,93 @@ class OcFhn:
     def compute_cost_validation(self):
         """Computes the average cost from M_validation noise realizations."""
         cost_validation = 0.0
+        counter = 0
         for m in range(self.M_validation):
             self.simulate_forward()
+            if np.isnan(self.get_xs()).any():
+                print("diverging model output in cost validation, repeat ")
+                # m -= 1
+                continue
+            counter += 1
             cost_validation += self.compute_total_cost()
-        return cost_validation / self.M_validation
+        return cost_validation / counter
 
-    def get_step_noisy(self, gradient):
-        """Computes the mean descent step for M noise realizations.
+    def step_size_noisy(self, cost_gradient):
+        """Use cost_gradient to avoid unnecessary re-computations (also of the adjoint state)
+        :param cost_gradient:
+        :type cost_gradient:
 
-        :param gradient: (mean) gradient of the respective iteration
-        :type: np.ndarray
-
-        :return:    Mean descent step size for M noise realizations.
+        :return:    Step size that got multiplied with the cost_gradient.
         :rtype:     float
         """
 
         step = 0.0
-        n_steps = 0.0
-        control0 = self.control
+        counter0 = 0.0
 
-        for m in range(self.M):
-            step_m = self.step_size(-gradient)
-            self.control = control0.copy()
-            self.update_input()
+        while step == 0.0:
+            counter0 += 1
 
-            # sort out zero stepsizes and average only over rest
-            if step_m > 0.0:
-                step += step_m
-                n_steps += 1
+            cost0 = 0.0
+            for m in range(self.M):
+                self.simulate_forward()
+                cost0 += self.compute_total_cost() / self.M
 
-        # if step=0 in all M realizations, this will interrupt the optimization
-        if n_steps == 0.0:
-            self.zero_step_encountered = True
+            factor = 0.5
+            step = self.step
+            counter = 0.0
 
-        return step / n_steps
+            control0 = self.control
+
+            while True:
+                # inplace updating of models x_ext bc. forward-sim relies on models parameters
+                self.control = control0 + step * cost_gradient
+                self.update_input()
+
+                # input signal might be too high and produce diverging values in simulation
+                self.simulate_forward()
+                if np.isnan(self.get_xs()).any():
+                    step *= factor
+                    self.step = step
+                    print("diverging model output, decrease step size to ", step)
+                    self.control = control0 + step * cost_gradient
+                    self.update_input()
+                else:
+                    break
+
+            cost = 0.0
+            for m in range(self.M):
+                self.simulate_forward()
+                cost += self.compute_total_cost() / self.M
+
+            while cost > cost0:
+                step *= factor
+                counter += 1
+
+                # inplace updating of models x_ext bc. forward-sim relies on models parameters
+                self.control = control0 + step * cost_gradient
+                self.update_input()
+
+                # time_series = model(x0, duration, dt, control1)
+                self.simulate_forward()
+                # cost = total_cost(control1, time_series, target)
+                cost = 0.0
+                for m in range(self.M):
+                    self.simulate_forward()
+                    cost += self.compute_total_cost() / self.M
+
+                if counter == 20.0:
+                    print("try another time")
+                    continue
+
+            if counter0 == 20.0:
+                step = 0.0  # for later analysis only
+                self.control = control0
+                self.update_input()
+                # logging.warning("Zero step encoutered, stop bisection")
+                self.zero_step_encountered = True
+                break
+
+        self.step_sizes_loops_history[self.cost_history_index - 1] = counter
+        self.step_sizes_history[self.cost_history_index - 1] = step
+
+        return step

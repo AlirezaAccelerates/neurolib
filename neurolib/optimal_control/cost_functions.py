@@ -1,6 +1,8 @@
 import numpy as np
+import numba
 
 
+@numba.njit
 def precision_cost(x_target, x_sim, w_p, N, precision_matrix, interval=(0, None)):
     """Summed squared difference between target and simulation within specified time interval weighted by w_p.
 
@@ -12,6 +14,13 @@ def precision_cost(x_target, x_sim, w_p, N, precision_matrix, interval=(0, None)
 
     :param w_p:         Weight that is multiplied with the precision cost.
     :type w_p:          float
+
+    :param N:           Number of nodes.
+    :type N:            int
+
+    :param precision_matrix: NxV binary matrix that defines nodes and channels of precision measurement, defaults to
+                                 None
+    :type precision_matrix:  np.ndarray
 
     :param interval:    [t_start, t_end]. Indices of start and end point of the slice (both inclusive) in time
                         dimension. Default is full time series, defaults to (0, None).
@@ -34,10 +43,7 @@ def precision_cost(x_target, x_sim, w_p, N, precision_matrix, interval=(0, None)
             * np.sum(
                 (
                     np.diag(precision_matrix[n, :])
-                    @ (
-                        x_target[n, :, interval[0] : interval[1]]
-                        - x_sim[n, :, interval[0] : interval[1]]
-                    )
+                    @ (x_target[n, :, interval[0] : interval[1]] - x_sim[n, :, interval[0] : interval[1]])
                 )
                 ** 2.0
             )
@@ -45,9 +51,8 @@ def precision_cost(x_target, x_sim, w_p, N, precision_matrix, interval=(0, None)
     return cost
 
 
-def derivative_precision_cost(
-    x_target, x_sim, w_p, precision_matrix, interval=(0, None)
-):
+@numba.njit
+def derivative_precision_cost(x_target, x_sim, w_p, precision_matrix, interval=(0, None)):
     """Derivative of precision cost wrt. to x_sim.
 
     :param x_target:    Control-dimensions x T array that contains the target time series.
@@ -59,6 +64,10 @@ def derivative_precision_cost(
     :param w_p:         Weight that is multiplied with the precision cost.
     :type w_p:          float
 
+    :param precision_matrix: NxV binary matrix that defines nodes and channels of precision measurement, defaults to
+                                 None
+    :type precision_matrix:  np.ndarray
+
     :param interval:    [t_start, t_end]. Indices of start and end point of the slice (both inclusive) in time
                         dimension. Default is full time series, defaults to (0, None).
     :type interval:     tuple, optional
@@ -68,14 +77,14 @@ def derivative_precision_cost(
     """
     derivative = np.zeros(x_target.shape)
     derivative[:, :, interval[0] : interval[1]] = -w_p * (
-        x_target[:, :, interval[0] : interval[1]]
-        - x_sim[:, :, interval[0] : interval[1]]
+        x_target[:, :, interval[0] : interval[1]] - x_sim[:, :, interval[0] : interval[1]]
     )
     for t in range(x_target.shape[2]):
         derivative[:, :, t] = np.multiply(derivative[:, :, t], precision_matrix)
     return derivative
 
 
+@numba.njit
 def energy_cost(u, w_2):
     """
     :param u:   Control-dimensions x T array. Control signals.
@@ -90,6 +99,7 @@ def energy_cost(u, w_2):
     return w_2 / 2.0 * np.sum(u**2.0)
 
 
+@numba.njit
 def derivative_energy_cost(u, w_2):
     """
     :param u:   Control-dimensions x T array. Control signals.

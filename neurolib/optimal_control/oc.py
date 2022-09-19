@@ -33,7 +33,7 @@ def solve_adjoint(hx, hx_nw, fx, state_dim, dt, N, T):
     fx_fullstate = np.zeros(state_dim)
     fx_fullstate[:, :2, :] = fx.copy()
 
-    for ind in range(T - 2, 0, -1):
+    for ind in range(T - 2, -1, -1):
         for n in range(N):
             der = fx_fullstate[n, :, ind + 1].copy()
             for k in range(len(der)):
@@ -56,7 +56,7 @@ class OC:
         w_p=1,
         w_2=1,
         print_array=[],
-        precision_cost_interval=(0, None),
+        precision_cost_interval=[0, None],
         precision_matrix=None,
         control_matrix=None,
         M=1,
@@ -202,6 +202,8 @@ class OC:
         self.zero_step_encountered = False  # deterministic gradient descent cannot further improve
 
         self.precision_cost_interval = precision_cost_interval
+        if type(self.precision_cost_interval[1]) == type(None):
+            self.precision_cost_interval[1] = -1
 
     @abc.abstractmethod
     def get_xs(self):

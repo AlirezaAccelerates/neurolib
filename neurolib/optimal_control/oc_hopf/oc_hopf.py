@@ -97,7 +97,7 @@ class OcHopf(OC):
         w_p=1,
         w_2=1,
         print_array=[],
-        precision_cost_interval=(0, None),
+        precision_cost_interval=[0, None],
         precision_matrix=None,
         control_matrix=None,
         M=1,
@@ -136,9 +136,6 @@ class OcHopf(OC):
         for n in range(self.N):
             assert (self.control[n, 0, :] == self.model.params["x_ext"][n, :]).all()
             assert (self.control[n, 1, :] == self.model.params["y_ext"][n, :]).all()
-
-        # save control signals throughout optimization iterations for later analysis
-        # self.control_history.append(self.control)
 
     def get_xs(self):
         """Stack the initial condition with the simulation results for both populations."""
@@ -208,6 +205,11 @@ class OcHopf(OC):
         # ToDo: model specific due to slicing '[:2, :]'
         self.solve_adjoint()
         fk = cost_functions.derivative_energy_cost(self.control, self.w_2)
+
+        # print(self.adjoint_state[0, 0, :4], np.amax(np.abs(self.adjoint_state[0, 0, :])))
+        # print(self.adjoint_state[0, 1, :4], np.amax(np.abs(self.adjoint_state[0, 1, :])))
+        # print(self.adjoint_state[1, 0, :4], np.amax(np.abs(self.adjoint_state[1, 0, :])))
+        # print(self.adjoint_state[1, 1, :4], np.amax(np.abs(self.adjoint_state[1, 1, :])))
 
         grad = np.zeros(fk.shape)
         for n in range(self.N):

@@ -120,7 +120,7 @@ class OcFhn(OC):
         w_p=1,
         w_2=1,
         print_array=[],
-        precision_cost_interval=(0, None),
+        precision_cost_interval=[0, None],
         precision_matrix=None,
         control_matrix=None,
         M=1,

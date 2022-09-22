@@ -56,7 +56,7 @@ class OC:
         w_p=1,
         w_2=1,
         print_array=[],
-        precision_cost_interval=[0, None],
+        precision_cost_interval=(0, None),
         precision_matrix=None,
         control_matrix=None,
         M=1,
@@ -186,6 +186,7 @@ class OC:
 
         # check correct specification of inputs
         # ToDo: different models have different inputs
+        self.background = None
         self.control = None
 
         self.cost_history = []
@@ -202,8 +203,6 @@ class OC:
         self.zero_step_encountered = False  # deterministic gradient descent cannot further improve
 
         self.precision_cost_interval = precision_cost_interval
-        if type(self.precision_cost_interval[1]) == type(None):
-            self.precision_cost_interval[1] = -1
 
     @abc.abstractmethod
     def get_xs(self):
@@ -239,14 +238,14 @@ class OC:
     def compute_total_cost(self):
         """Compute the total cost as weighted sum precision of precision and L2 term."""
         precision_cost = cost_functions.precision_cost(
-            self.target,
-            self.get_xs(),
+            self.target[:, :, self.precision_cost_interval[0] : self.precision_cost_interval[1]],
+            self.get_xs()[:, :, self.precision_cost_interval[0] : self.precision_cost_interval[1]],
             self.w_p,
             self.N,
             self.precision_matrix,
-            interval=self.precision_cost_interval,
         )
         energy_cost = cost_functions.energy_cost(self.control, w_2=self.w_2)
+
         return precision_cost + energy_cost
 
     @abc.abstractmethod

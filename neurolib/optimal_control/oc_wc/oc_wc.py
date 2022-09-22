@@ -4,17 +4,17 @@ import numpy as np
 import numba
 
 
-# @numba.njit
+@numba.njit
 def S(x, a, mu):
     return 1.0 / (1.0 + np.exp(-a * (x - mu)))
 
 
-# @numba.njit
+@numba.njit
 def S_der(x, a, mu):
     return (a * np.exp(-a * (x - mu))) / (1.0 + np.exp(-a * (x - mu))) ** 2
 
 
-# @numba.njit
+@numba.njit
 def Duh(
     N,
     V,
@@ -45,7 +45,7 @@ def Duh(
     return duh
 
 
-# @numba.njit
+@numba.njit
 def jacobian_wc(
     tau_exc, tau_inh, a_exc, a_inh, mu_exc, mu_inh, c_excexc, c_inhexc, c_excinh, c_inhinh, nw_e, e, i, ue, ui, V
 ):
@@ -77,7 +77,7 @@ def jacobian_wc(
     return jacobian
 
 
-# @numba.njit
+@numba.njit
 def compute_hx(
     tau_exc,
     tau_inh,
@@ -118,13 +118,17 @@ def compute_hx(
     :rtype: np.ndarray of shape Tx2x2
     """
     hx = np.zeros((N, T, V, V))
-    nw_e = compute_nw_input(N, T, K_gl, cmat, dmat, xs[:, 0, :])
+    nw_e = np.zeros((N, T))
+    if cmat != None and dmat != None:
+        nw_e = compute_nw_input(N, T, K_gl, cmat, dmat, xs[:, 0, :])
 
     for n in range(N):
-        for t, e in enumerate(xs[n, 0, :]):
+        for t in range(T):
+            e = xs[n, 0, t]
             i = xs[n, 1, t]
             ue = control[n, 0, t]
             ui = control[n, 1, t]
+
             hx[n, t, :, :] = jacobian_wc(
                 tau_exc,
                 tau_inh,
@@ -146,19 +150,19 @@ def compute_hx(
     return hx
 
 
-# @numba.njit
+@numba.njit
 def compute_nw_input(N, T, K_gl, cmat, dmat, E):
 
     nw_input = np.zeros((N, T))
-    if N > 1:
-        for t in range(1, T):
-            for n in range(N):
-                for l in range(N):
-                    nw_input[n, t] += K_gl * cmat[n, l] * (E[l, t - dmat[n, l] - 1])
+
+    for t in range(1, T):
+        for n in range(N):
+            for l in range(N):
+                nw_input[n, t] += K_gl * cmat[n, l] * (E[l, t - dmat[n, l] - 1])
     return nw_input
 
 
-# @numba.njit
+@numba.njit
 def compute_hx_nw(K_gl, cmat, N, V, T):
     """Jacobians for network connectivity in all time steps.
 
@@ -183,7 +187,7 @@ def compute_hx_nw(K_gl, cmat, N, V, T):
     """
     hx_nw = np.zeros((N, N, T, V, V))
 
-    print("network not implemented")
+    # print("network not implemented")
     return hx_nw
 
     for n1 in range(N):
@@ -207,7 +211,6 @@ class OcWc(OC):
         M=1,
         M_validation=0,
         validate_per_step=False,
-        method=None,
     ):
         super().__init__(
             model,
@@ -221,7 +224,6 @@ class OcWc(OC):
             M=M,
             M_validation=M_validation,
             validate_per_step=validate_per_step,
-            method=method,
         )
 
         assert self.model.name == "wc"
@@ -233,15 +235,17 @@ class OcWc(OC):
             if self.model.params["exc_ext"].ndim == 1:
                 print("not implemented yet")
             else:
-                self.control = np.concatenate((self.model.params["exc_ext"], self.model.params["inh_ext"]), axis=0)[
+                self.background = np.concatenate((self.model.params["exc_ext"], self.model.params["inh_ext"]), axis=0)[
                     np.newaxis, :, :
                 ]
         else:
-            self.control = np.stack((self.model.params["exc_ext"], self.model.params["inh_ext"]), axis=1)
+            self.background = np.stack((self.model.params["exc_ext"], self.model.params["inh_ext"]), axis=1)
+
+        self.control = np.zeros((self.background.shape))
 
         for n in range(self.N):
-            assert (self.control[n, 0, :] == self.model.params["exc_ext"][n, :]).all()
-            assert (self.control[n, 1, :] == self.model.params["inh_ext"][n, :]).all()
+            assert (self.background[n, 0, :] == self.model.params["exc_ext"][n, :]).all()
+            assert (self.background[n, 1, :] == self.model.params["inh_ext"][n, :]).all()
 
     def get_xs(self):
         """Stack the initial condition with the simulation results for both populations."""
@@ -260,13 +264,16 @@ class OcWc(OC):
         operates with the appropriate control signal.
         """
         # ToDo: find elegant way to combine the cases
+
+        input = self.background + self.control
+
         if self.N == 1:
-            self.model.params["exc_ext"] = self.control[:, 0, :].reshape(1, -1)  # Reshape as row vector to match access
-            self.model.params["inh_ext"] = self.control[:, 1, :].reshape(1, -1)  # in model's time integration.
+            self.model.params["exc_ext"] = input[:, 0, :].reshape(1, -1)  # Reshape as row vector to match access
+            self.model.params["inh_ext"] = input[:, 1, :].reshape(1, -1)  # in model's time integration.
 
         else:
-            self.model.params["exc_ext"] = self.control[:, 0, :]
-            self.model.params["inh_ext"] = self.control[:, 1, :]
+            self.model.params["exc_ext"] = input[:, 0, :]
+            self.model.params["inh_ext"] = input[:, 1, :]
 
     def Dxdot(self):
         """4x4 Jacobian of systems dynamics wrt. to change of systems variables."""
@@ -278,9 +285,12 @@ class OcWc(OC):
         xs = self.get_xs()
         e = xs[:, 0, :]
         i = xs[:, 1, :]
-        nw_e = compute_nw_input(
-            self.N, self.T, self.model.params.K_gl, self.model.params.Cmat, self.model.params.Dmat, e
-        )
+
+        nw_e = np.zeros((self.N, self.T))
+        if self.model.params.Cmat != None and self.model.params.Dmat != None:
+            nw_e = compute_nw_input(
+                self.N, self.T, self.model.params.K_gl, self.model.params.Cmat, self.model.params.Dmat, e
+            )
 
         control = self.control
         ue = control[:, 0, :]
@@ -340,13 +350,16 @@ class OcWc(OC):
         :return: N x N x T x (4x4) array
         :rtype: np.ndarray
         """
-        return compute_hx_nw(
-            self.model.params["K_gl"],
-            self.model.params["Cmat"],
-            self.N,
-            self.dim_vars,
-            self.T,
-        )
+        hx_nw = np.zeros((self.N, self.N, self.T, self.dim_vars, self.dim_vars))
+        if self.model.params.Cmat != None:
+            hx_nw = compute_hx_nw(
+                self.model.params["K_gl"],
+                self.model.params["Cmat"],
+                self.N,
+                self.dim_vars,
+                self.T,
+            )
+        return hx_nw
 
     def compute_gradient(self):
         """

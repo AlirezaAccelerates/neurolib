@@ -238,11 +238,12 @@ class OC:
     def compute_total_cost(self):
         """Compute the total cost as weighted sum precision of precision and L2 term."""
         precision_cost = cost_functions.precision_cost(
-            self.target[:, :, self.precision_cost_interval[0] : self.precision_cost_interval[1]],
-            self.get_xs()[:, :, self.precision_cost_interval[0] : self.precision_cost_interval[1]],
+            self.target,
+            self.get_xs(),
             self.w_p,
             self.N,
             self.precision_matrix,
+            self.precision_cost_interval,
         )
         energy_cost = cost_functions.energy_cost(self.control, w_2=self.w_2)
 

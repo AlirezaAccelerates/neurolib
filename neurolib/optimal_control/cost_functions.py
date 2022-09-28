@@ -37,7 +37,17 @@ def precision_cost(x_target, x_sim, w_p, N, precision_matrix, interval=(0, None)
 
     cost = 0.0
     for n in range(N):
-        cost += w_p * 0.5 * np.sum((np.diag(precision_matrix[n, :]) @ (x_target[n, :, :] - x_sim[n, :, :])) ** 2.0)
+        cost += (
+            w_p
+            * 0.5
+            * np.sum(
+                (
+                    np.diag(precision_matrix[n, :])
+                    @ (x_target[n, :, interval[0] : interval[1]] - x_sim[n, :, interval[0] : interval[1]])
+                )
+                ** 2.0
+            )
+        )
     return cost
 
 

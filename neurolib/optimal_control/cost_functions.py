@@ -35,20 +35,17 @@ def precision_cost(x_target, x_sim, w_p, N, precision_matrix, interval=(0, None)
     # for the norm at one particular t as well as the integration over t
     # (commutative)
 
+    # ToDo: remove parameter N
+
     cost = 0.0
     for n in range(N):
-        cost += (
-            w_p
-            * 0.5
-            * np.sum(
-                (
-                    np.diag(precision_matrix[n, :])
-                    @ (x_target[n, :, interval[0] : interval[1]] - x_sim[n, :, interval[0] : interval[1]])
-                )
-                ** 2.0
-            )
-        )
-    return cost
+        for v in range(x_target.shape[1]):
+            for t in range(interval[0], interval[1]):
+                cost += precision_matrix[n, v] * (x_target[n, v, t] - x_sim[n, v, t]) ** 2
+
+    print(interval[1])
+
+    return w_p * 0.5 * cost
 
 
 @numba.njit
@@ -77,16 +74,20 @@ def derivative_precision_cost(x_target, x_sim, w_p, precision_matrix, interval=(
     """
 
     derivative = np.zeros(x_target.shape)
-    derivative[:, :, interval[0] : interval[1]] = -w_p * (
-        x_target[:, :, interval[0] : interval[1]] - x_sim[:, :, interval[0] : interval[1]]
-    )
 
-    for t in range(x_target.shape[2]):
-        derivative[:, :, t] = np.multiply(derivative[:, :, t], precision_matrix)
+    for n in range(x_target.shape[0]):
+        for v in range(x_target.shape[1]):
+            for t in range(interval[0], interval[1]):  # [:, :, interval[0] : interval[1]]
+                derivative[n, v, t] = -w_p * (x_target[n, v, t] - x_sim[n, v, t])
+
+    for n in range(x_target.shape[0]):
+        for v in range(x_target.shape[1]):
+            for t in range(interval[0], interval[1]):
+                derivative[n, v, t] = np.multiply(derivative[n, v, t], precision_matrix[n, v])
     return derivative
 
 
-@numba.njit
+# @numba.njit
 def energy_cost(u, w_2):
     """
     :param u:   Control-dimensions x T array. Control signals.
@@ -98,7 +99,7 @@ def energy_cost(u, w_2):
     :return:    W2 cost of the control.
     :rtype:     float
     """
-    return w_2 / 2.0 * np.sum(u**2.0)
+    return w_2 * 0.5 * np.sum(u**2.0)
 
 
 @numba.njit

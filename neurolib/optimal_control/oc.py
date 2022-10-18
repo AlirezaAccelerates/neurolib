@@ -122,6 +122,8 @@ class OC:
         self.step = 10.0
         if self.model.name == "wc":
             self.step = 1000.0
+        self.count_noisy_step = 10
+        self.count_step = 20
 
         self.N = self.model.params.N
 
@@ -210,6 +212,8 @@ class OC:
         self.zero_step_encountered = False  # deterministic gradient descent cannot further improve
 
         self.precision_cost_interval = precision_cost_interval
+        if precision_cost_interval[1] == None:
+            self.precision_cost_interval[1] = self.T
 
     @abc.abstractmethod
     def get_xs(self):

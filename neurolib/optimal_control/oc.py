@@ -123,7 +123,7 @@ class OC:
         if self.model.name == "wc":
             self.step = 1000.0
         self.count_noisy_step = 10
-        self.count_step = 20
+        self.count_step = 50
 
         self.N = self.model.params.N
 
@@ -213,7 +213,7 @@ class OC:
 
         self.precision_cost_interval = precision_cost_interval
         if precision_cost_interval[1] == None:
-            self.precision_cost_interval[1] = self.T
+            self.precision_cost_interval = (self.precision_cost_interval[0], self.T)
 
     @abc.abstractmethod
     def get_xs(self):
@@ -336,6 +336,7 @@ class OC:
 
         cost = self.compute_total_cost()
         while cost > cost0:
+            # print(cost0, cost, step, np.amax(np.abs(cost_gradient)))
             step *= factor
             counter += 1
 
@@ -391,6 +392,8 @@ class OC:
             self.cost_history.append(cost)
 
         i = 0
+
+        self.zero_step_encountered = False
 
         for i in range(1, n_max_iterations + 1):
             grad = self.compute_gradient()

@@ -43,8 +43,6 @@ def precision_cost(x_target, x_sim, w_p, N, precision_matrix, interval=(0, None)
             for t in range(interval[0], interval[1]):
                 cost += precision_matrix[n, v] * (x_target[n, v, t] - x_sim[n, v, t]) ** 2
 
-    print(interval[1])
-
     return w_p * 0.5 * cost
 
 

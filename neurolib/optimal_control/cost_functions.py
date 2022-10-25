@@ -6,23 +6,20 @@ import numba
 def precision_cost(dt, x_target, x_sim, w_p, N, precision_matrix, interval=(0, None)):
     """Summed squared difference between target and simulation within specified time interval weighted by w_p.
 
-    :param x_target:    Control-dimensions x T array that contains the target time series.
+    :param x_target:    N x V x T array that contains the target time series.
     :type x_target:     np.ndarray
 
-    :param x_sim:       Control-dimensions x T array that contains the simulated time series.
+    :param x_sim:       N x V x T array that contains the simulated time series.
     :type x_sim:        np.ndarray
 
     :param w_p:         Weight that is multiplied with the precision cost.
     :type w_p:          float
 
-    :param N:           Number of nodes.
-    :type N:            int
-
-    :param precision_matrix: NxV binary matrix that defines nodes and channels of precision measurement, defaults to
+    :param precision_matrix: N x V binary matrix that defines nodes and channels of precision measurement, defaults to
                                  None
     :type precision_matrix:  np.ndarray
 
-    :param interval:    [t_start, t_end]. Indices of start and end point of the slice (both inclusive) in time
+    :param interval:    (t_start, t_end). Indices of start and end point of the slice (both inclusive) in time
                         dimension. Default is full time series, defaults to (0, None).
     :type interval:     tuple, optional
 
@@ -30,15 +27,9 @@ def precision_cost(dt, x_target, x_sim, w_p, N, precision_matrix, interval=(0, N
     :rtype:             float
 
     """
-    # np.sum without specified axis implicitly performs
-    # summation that would correspond to np.sum((x1(t)-x2(t)**2)
-    # for the norm at one particular t as well as the integration over t
-    # (commutative)
-
-    # ToDo: remove parameter N
 
     cost = 0.0
-    for n in range(N):
+    for n in range(x_target.shape[0]):
         for v in range(x_target.shape[1]):
             for t in range(interval[0], interval[1]):
                 cost += precision_matrix[n, v] * (x_target[n, v, t] - x_sim[n, v, t]) ** 2
@@ -50,20 +41,20 @@ def precision_cost(dt, x_target, x_sim, w_p, N, precision_matrix, interval=(0, N
 def derivative_precision_cost(x_target, x_sim, w_p, precision_matrix, interval=(0, None)):
     """Derivative of precision cost wrt. to x_sim.
 
-    :param x_target:    Control-dimensions x T array that contains the target time series.
+    :param x_target:    N x V x T array that contains the target time series.
     :type x_target:     np.ndarray
 
-    :param x_sim:       Control-dimensions x T array that contains the simulated time series.
+    :param x_sim:       N x V x T array that contains the simulated time series.
     :type x_sim:        np.ndarray
 
     :param w_p:         Weight that is multiplied with the precision cost.
     :type w_p:          float
 
-    :param precision_matrix: NxV binary matrix that defines nodes and channels of precision measurement, defaults to
+    :param precision_matrix: N x V binary matrix that defines nodes and channels of precision measurement, defaults to
                                  None
     :type precision_matrix:  np.ndarray
 
-    :param interval:    [t_start, t_end]. Indices of start and end point of the slice (both inclusive) in time
+    :param interval:    (t_start, t_end). Indices of start and end point of the slice (both inclusive) in time
                         dimension. Default is full time series, defaults to (0, None).
     :type interval:     tuple, optional
 
@@ -75,13 +66,9 @@ def derivative_precision_cost(x_target, x_sim, w_p, precision_matrix, interval=(
 
     for n in range(x_target.shape[0]):
         for v in range(x_target.shape[1]):
-            for t in range(interval[0], interval[1]):  # [:, :, interval[0] : interval[1]]
-                derivative[n, v, t] = -w_p * (x_target[n, v, t] - x_sim[n, v, t])
-
-    for n in range(x_target.shape[0]):
-        for v in range(x_target.shape[1]):
             for t in range(interval[0], interval[1]):
-                derivative[n, v, t] = np.multiply(derivative[n, v, t], precision_matrix[n, v])
+                derivative[n, v, t] = np.multiply(-w_p * (x_target[n, v, t] - x_sim[n, v, t]), precision_matrix[n, v])
+
     return derivative
 
 

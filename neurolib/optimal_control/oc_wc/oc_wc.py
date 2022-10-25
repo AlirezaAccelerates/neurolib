@@ -311,11 +311,11 @@ class OcWc(OC):
         else:
             self.background = np.stack((self.model.params["exc_ext"], self.model.params["inh_ext"]), axis=1)
 
-        self.control = np.zeros((self.background.shape))
-
         for n in range(self.N):
             assert (self.background[n, 0, :] == self.model.params["exc_ext"][n, :]).all()
             assert (self.background[n, 1, :] == self.model.params["inh_ext"][n, :]).all()
+
+        self.control = np.zeros((self.background.shape))
 
     def get_xs(self):
         """Stack the initial condition with the simulation results for both populations."""
@@ -333,6 +333,7 @@ class OcWc(OC):
         """Update the parameters in self.model according to the current control such that self.simulate_forward
         operates with the appropriate control signal.
         """
+        input = self.background + self.control
         # ToDo: find elegant way to combine the cases
 
         input = self.background + self.control
@@ -357,9 +358,9 @@ class OcWc(OC):
         i = xs[:, 1, :]
         nw_e = compute_nw_input(self.N, self.T, self.model.params.K_gl, self.model.Cmat, self.Dmat_ndt, e)
 
-        control = self.control
-        ue = control[:, 0, :]
-        ui = control[:, 1, :]
+        input = self.background + self.control
+        ue = input[:, 0, :]
+        ui = input[:, 1, :]
 
         return Duh(
             self.N,
@@ -406,7 +407,7 @@ class OcWc(OC):
             self.dim_vars,
             self.T,
             self.get_xs(),
-            self.control,
+            self.background + self.control,
         )
 
     def compute_hx_nw(self):
@@ -419,7 +420,7 @@ class OcWc(OC):
         xs = self.get_xs()
         e = xs[:, 0, :]
         i = xs[:, 1, :]
-        ue = self.control[:, 0, :]
+        ue = self.background[:, 0, :] + self.control[:, 0, :]
 
         return compute_hx_nw(
             self.model.params.K_gl,

@@ -53,6 +53,41 @@ def solve_adjoint(hx, hx_nw, fx, state_dim, dt, N, T):
     return adjoint_state
 
 
+@numba.njit
+def update_control_with_limit(control, step, gradient, u_max):
+    """Computes the updated control signal. The absolute values of the new control are bounded by +/- u_max.
+    :param control:         N x V x T array. Control signals.
+    :type control:          np.ndarray
+
+    :param step:            Step size along the gradients.
+    :type step:             float
+
+    :param gradient:        N x V x T array of the gradients.
+    :type gradient:         np.ndarray
+
+    :param u_max:           Maximum absolute value allowed for the strength of the control signal.
+    :type u_max:            float or None
+
+    :return:                N x V x T array containing the new control signal (updated according to 'step' and
+                            'gradient' with the maximum absolute values being limited by 'u_max'.
+    :rtype:                 np.ndarray
+    """
+
+    control_new = control + step * gradient
+
+    if u_max is not None:
+
+        control_new = control + step * gradient
+
+        for n in range(control_new.shape[0]):
+            for v in range(control_new.shape[1]):
+                for t in range(control_new.shape[2]):
+                    if np.greater(np.abs(control_new[n, v, t]), u_max):
+                        control_new[n, v, t] = np.sign(control_new[n, v, t]) * u_max
+
+    return control_new
+
+
 class OC:
     def __init__(
         self,
@@ -60,6 +95,7 @@ class OC:
         target,
         w_p=1,
         w_2=1,
+        maximum_control_strength=None,
         print_array=[],
         precision_cost_interval=(0, None),
         precision_matrix=None,
@@ -69,11 +105,11 @@ class OC:
         validate_per_step=False,
     ):
         """
-        Base class for optimal control. Model specific methods, like
+        Base class for optimal control. Model specific methods should be implemented in derived class for each model.
 
-        :param model:   An instance of neurolib's Model-class. Parameters like ".duration" and methods like ".run()"
+        :param model:       An instance of neurolib's Model-class. Parameters like ".duration" and methods like ".run()"
                             are used within the optimal control.
-        :type model:    neurolib.models.model
+        :type model:        neurolib.models.model
 
         :param target:      2xT matrix with [0, :] target of x-population and [1, :] target of y-population.
         :type target:       np.ndarray
@@ -83,6 +119,10 @@ class OC:
 
         :param w_2:         Weight of the L2 cost term, defaults to 1.
         :type w_2:          float, optional
+
+        :param maximum_control_strength:    Maximum absolute value a control signal can take. No limitation of the
+                                            absolute control strength if 'None'. Defaults to None.
+        :type:                              float or None, optional
 
         :param print_array: Array of optimization-iteration-indices (starting at 1) in which cost is printed out.
                             Defaults to empty list `[]`.
@@ -123,6 +163,7 @@ class OC:
 
         self.w_p = w_p
         self.w_2 = w_2
+        self.maximum_control_strength = maximum_control_strength
 
         self.step = 10.0
         if self.model.name == "wc":
@@ -258,7 +299,6 @@ class OC:
             self.target,
             self.get_xs(),
             self.w_p,
-            self.N,
             self.precision_matrix,
             self.precision_cost_interval,
         )
@@ -362,7 +402,7 @@ class OC:
 
         while True:
             # inplace updating of models x_ext bc. forward-sim relies on models parameters
-            self.control = control0 + step * cost_gradient
+            self.control = update_control_with_limit(control0, step, cost_gradient, self.maximum_control_strength)
             self.update_input()
 
             # input signal might be too high and produce diverging values in simulation
@@ -371,7 +411,7 @@ class OC:
                 step *= factor
                 self.step = step
                 print("diverging model output, decrease step size to ", step)
-                self.control = control0 + step * cost_gradient
+                self.control = update_control_with_limit(control0, step, cost_gradient, self.maximum_control_strength)
                 self.update_input()
             else:
                 break
@@ -383,7 +423,7 @@ class OC:
             counter += 1
 
             # inplace updating of models x_ext bc. forward-sim relies on models parameters
-            self.control = control0 + step * cost_gradient
+            self.control = update_control_with_limit(control0, step, cost_gradient, self.maximum_control_strength)
             self.update_input()
 
             self.simulate_forward()
@@ -391,7 +431,9 @@ class OC:
 
             if counter == self.count_step:
                 step = 0.0  # for later analysis only
-                self.control = control0
+                self.control = update_control_with_limit(
+                    control0, 0.0, np.zeros(control0.shape), self.maximum_control_strength
+                )
                 self.update_input()
                 # logging.warning("Zero step encoutered, stop bisection")
                 if self.M == 1:
@@ -568,7 +610,7 @@ class OC:
 
         while True:
             # inplace updating of models x_ext bc. forward-sim relies on models parameters
-            self.control = control0 + step * cost_gradient
+            self.control = update_control_with_limit(control0, step, cost_gradient, self.maximum_control_strength)
             self.update_input()
 
             # input signal might be too high and produce diverging values in simulation
@@ -577,7 +619,7 @@ class OC:
                 step *= factor * factor  # decrease step twice to avoid that other noise realizations diverge
                 self.step = step
                 print("diverging model output, decrease step size to ", step)
-                self.control = control0 + step * cost_gradient
+                self.control = update_control_with_limit(control0, step, cost_gradient, self.maximum_control_strength)
                 self.update_input()
             else:
                 break
@@ -588,14 +630,16 @@ class OC:
             counter += 1
 
             # inplace updating of models x_ext bc. forward-sim relies on models parameters
-            self.control = control0 + step * cost_gradient
+            self.control = update_control_with_limit(control0, step, cost_gradient, self.maximum_control_strength)
             self.update_input()
 
             cost = self.compute_cost_noisy(self.M)
 
             if counter == self.count_step:
                 step = 0.0  # for later analysis only
-                self.control = control0
+                self.control = update_control_with_limit(
+                    control0, 0.0, np.zeros(control0.shape), self.maximum_control_strength
+                )
                 self.update_input()
                 self.zero_step_encountered = True
 

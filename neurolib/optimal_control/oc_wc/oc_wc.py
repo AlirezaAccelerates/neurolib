@@ -70,14 +70,33 @@ def jacobian_wc(
     )
     jacobian[0, 1] = -((1.0 - e) * (-c_inhexc) * S_der(input_exc, a_exc, mu_exc)) / tau_exc
     input_inh = c_excinh * e - c_inhinh * i + ui
-    jacobian[1, 0] = -((1.0 - e) * c_excinh * S_der(input_inh, a_inh, mu_inh)) / tau_inh
+    jacobian[1, 0] = -((1.0 - i) * c_excinh * S_der(input_inh, a_inh, mu_inh)) / tau_inh
     jacobian[1, 1] = (
         -(-1.0 - S(input_inh, a_inh, mu_inh) + (1.0 - i) * (-c_inhinh) * S_der(input_inh, a_inh, mu_inh)) / tau_inh
     )
+
+    if S(input_exc, a_exc, mu_exc) < 0.0:
+        print("error 1")
+    if S(input_exc, a_exc, mu_exc) > 1.0:
+        print("error 2")
+    if S_der(input_exc, a_exc, mu_exc) < 0.0:
+        print("error 3")
+    if S_der(input_exc, a_exc, mu_exc) > 1.5:
+        print("error 4")
+
+    if S(input_inh, a_inh, mu_inh) < 0.0:
+        print("error 5")
+    if S(input_inh, a_inh, mu_inh) > 1.0:
+        print("error 6")
+    if S_der(input_inh, a_inh, mu_inh) < 0.0:
+        print("error 7")
+    if S_der(input_inh, a_inh, mu_inh) > 1.5:
+        print("error 8")
+
     return jacobian
 
 
-@numba.njit
+# @numba.njit
 def compute_hx(
     tau_exc,
     tau_inh,
@@ -120,6 +139,41 @@ def compute_hx(
     hx = np.zeros((N, T, V, V))
     nw_e = compute_nw_input(N, T, K_gl, cmat, dmat_ndt, xs[:, 0, :])
 
+    import matplotlib.pyplot as plt
+
+    input_e = c_excexc * xs[0, 0, :] - c_inhexc * xs[0, 1, :]
+    input_i = c_excinh * xs[0, 0, :] - c_inhinh * xs[0, 1, :]
+
+    # print("inputs")
+    # plt.plot(input_e)
+    # plt.plot(input_i)
+    # plt.show()
+
+    exp = np.exp(-a_inh * (input_i - mu_inh))
+    exp_der = exp / (1.0 + exp) ** 2
+
+    # print("exp")
+    # plt.plot(exp)
+    # plt.ylim(0, 1)
+    # plt.show()
+    # plt.plot(exp_der)
+    # plt.yscale("log")
+    # plt.show()
+
+    se = S(input_e, a_exc, mu_exc)
+    si = S(input_i, a_inh, mu_inh)
+    # print("SE, SI")
+    # plt.plot(se)
+    # plt.plot(si)
+    # plt.show()
+
+    se = S_der(input_e, a_exc, mu_exc)
+    si = S_der(input_i, a_inh, mu_inh)
+    # print("der SE, SI")
+    # plt.plot(se)
+    # plt.plot(si)
+    # plt.show()
+
     for n in range(N):
         for t in range(T):
             e = xs[n, 0, t]
@@ -145,6 +199,7 @@ def compute_hx(
                 ui,
                 V,
             )
+
     return hx
 
 

@@ -3,7 +3,7 @@ import numba
 
 
 @numba.njit
-def precision_cost(x_target, x_sim, w_p, N, precision_matrix, interval=(0, None)):
+def precision_cost(dt, x_target, x_sim, w_p, N, precision_matrix, interval=(0, None)):
     """Summed squared difference between target and simulation within specified time interval weighted by w_p.
 
     :param x_target:    Control-dimensions x T array that contains the target time series.
@@ -43,7 +43,7 @@ def precision_cost(x_target, x_sim, w_p, N, precision_matrix, interval=(0, None)
             for t in range(interval[0], interval[1]):
                 cost += precision_matrix[n, v] * (x_target[n, v, t] - x_sim[n, v, t]) ** 2
 
-    return w_p * 0.5 * cost
+    return w_p * dt * 0.5 * cost
 
 
 @numba.njit
@@ -86,7 +86,7 @@ def derivative_precision_cost(x_target, x_sim, w_p, precision_matrix, interval=(
 
 
 # @numba.njit
-def energy_cost(u, w_2):
+def energy_cost(dt, u, w_2):
     """
     :param u:   Control-dimensions x T array. Control signals.
     :type u:    np.ndarray
@@ -97,7 +97,7 @@ def energy_cost(u, w_2):
     :return:    W2 cost of the control.
     :rtype:     float
     """
-    return w_2 * 0.5 * np.sum(u**2.0)
+    return w_2 * dt * 0.5 * np.sum(u**2.0)
 
 
 @numba.njit

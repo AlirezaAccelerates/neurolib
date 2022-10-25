@@ -5,7 +5,6 @@ from neurolib.optimal_control import cost_functions
 import logging
 import copy
 
-
 # compared loops agains "@", "np.matmul" and "np.dot": loops ~factor 3.5 faster
 @numba.njit
 def solve_adjoint(hx, hx_nw, fx, state_dim, dt, N, T):
@@ -37,12 +36,18 @@ def solve_adjoint(hx, hx_nw, fx, state_dim, dt, N, T):
         for n in range(N):
             der = fx_fullstate[n, :, ind + 1].copy()
             for k in range(len(der)):
+                # if ind in [50, 200] and k == 0:
+                # print(ind)
+                # print(der[k])
                 for i in range(len(der)):
                     der[k] += adjoint_state[n, i, ind + 1] * hx[n, ind + 1][i, k]
+                    # if ind in [50, 200] and k == 0 and i < 2:
+                    #    print(der[k], hx[n, ind + 1][i, k])
             for n2 in range(N):
                 for k in range(len(der)):
                     for i in range(len(der)):
                         der[k] += adjoint_state[n2, i, ind + 1] * hx_nw[n2, n, ind + 1][i, k]
+
             adjoint_state[n, :, ind] = adjoint_state[n, :, ind + 1] - der * dt
 
     return adjoint_state
@@ -249,6 +254,7 @@ class OC:
     def compute_total_cost(self):
         """Compute the total cost as weighted sum precision of precision and L2 term."""
         precision_cost = cost_functions.precision_cost(
+            self.model.params.dt,
             self.target,
             self.get_xs(),
             self.w_p,
@@ -256,7 +262,7 @@ class OC:
             self.precision_matrix,
             self.precision_cost_interval,
         )
-        energy_cost = cost_functions.energy_cost(self.control, w_2=self.w_2)
+        energy_cost = cost_functions.energy_cost(self.model.params.dt, self.control, w_2=self.w_2)
 
         return precision_cost + energy_cost
 
@@ -289,7 +295,28 @@ class OC:
     def solve_adjoint(self):
         """Backwards integration of the adjoint state."""
         hx = self.compute_hx()
+
+        import matplotlib.pyplot as plt
+
+        # print("HX ee")
+        # plt.plot(hx[0, :, 0, 0])
+        # plt.show()
+
+        # print("HX ei")
+        # plt.plot(hx[0, :, 0, 1])
+        # plt.show()
+
+        # print("HX ie")
+        # plt.plot(hx[0, :, 1, 0])
+        # plt.show()
+
+        # print("HX ii")
+        # plt.plot(hx[0, :, 1, 1])
+        # plt.show()
+
         hx_nw = self.compute_hx_nw()
+
+        # print(np.amax(np.abs(hx_nw)))
 
         # ToDo: generalize, not only precision cost
         fx = cost_functions.derivative_precision_cost(
@@ -300,7 +327,22 @@ class OC:
             interval=self.precision_cost_interval,
         )
 
+        # print("fx")
+        # plt.plot(fx[0, 0, :])
+        # plt.show()
+
+        # print(np.amax(np.abs(fx[0, 1, :])))
+
         self.adjoint_state = solve_adjoint(hx, hx_nw, fx, self.state_dim, self.dt, self.N, self.T)
+
+        # print("Adjoint state")
+        # plt.plot(self.adjoint_state[0, 0, :])
+        # plt.hlines(0, 0, self.adjoint_state.shape[2])
+        # plt.show()
+
+        # plt.plot(self.adjoint_state[0, 1, :])
+        # plt.hlines(0, 0, self.adjoint_state.shape[2])
+        # plt.show()
 
     def step_size(self, cost_gradient):
         """Use cost_gradient to avoid unnecessary re-computations (also of the adjoint state)

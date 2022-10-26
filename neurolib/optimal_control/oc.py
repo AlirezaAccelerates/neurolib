@@ -243,6 +243,7 @@ class OC:
         # ToDo: different models have different inputs
         self.background = None
         self.control = None
+        self.grad = None
 
         self.cost_history = []
         self.step_sizes_history = []
@@ -480,13 +481,13 @@ class OC:
         self.zero_step_encountered = False
 
         for i in range(1, n_max_iterations + 1):
-            grad = self.compute_gradient()
+            self.grad = self.compute_gradient()
 
             if self.zero_step_encountered:
                 print(f"Converged in iteration %s with cost %s" % (i, cost))
                 break
 
-            self.step_size(-grad)
+            self.step_size(-self.grad)
             self.simulate_forward()
 
             cost = self.compute_total_cost()
@@ -530,13 +531,13 @@ class OC:
 
         for i in range(1, n_max_iterations + 1):
 
-            grad = np.mean(grad_m, axis=0)
+            self.grad = np.mean(grad_m, axis=0)
 
             count = 0
             while count < self.count_noisy_step:
                 count += 1
                 self.zero_step_encountered = False
-                step = self.step_size_noisy(-grad)
+                step = self.step_size_noisy(-self.grad)
                 if not self.zero_step_encountered:
                     consecutive_zero_step = 0
                     break

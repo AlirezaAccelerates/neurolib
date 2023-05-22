@@ -557,9 +557,7 @@ class OC:
         self.zero_step_encountered = False  # deterministic gradient descent cannot further improve
 
         self.cost_interval = convert_interval(cost_interval, self.T)
-
-        self.ndt_de, self.ndt_di = 0.0, 0.0
-
+        
     @abc.abstractmethod
     def get_xs(self):
         """Stack the initial condition with the simulation results for controllable state variables."""

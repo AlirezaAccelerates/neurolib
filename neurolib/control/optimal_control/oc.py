@@ -631,18 +631,8 @@ class OC:
         )
 
     @abc.abstractmethod
-    def compute_hx(self):
-        """Jacobians of model dynamics wrt. its 'state_vars' at each time step."""
-        pass
-
-    @abc.abstractmethod
     def compute_hx_list(self):
         """Jacobians of model dynamics wrt. its 'state_vars' at each time step."""
-        pass
-
-    @abc.abstractmethod
-    def compute_hx_de(self):
-        """Jacobians of model dynamics wrt. its delayed 'state_vars' at each time step."""
         pass
 
     @abc.abstractmethod

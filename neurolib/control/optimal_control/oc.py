@@ -645,6 +645,7 @@ class OC:
     def solve_adjoint(self):
         """Backwards integration of the adjoint state."""
 
+        # fullstate needs to be evaluated before computation of jacobian matrices
         if self.model.name == "aln":
             self.fullstate = self.get_fullstate()
 

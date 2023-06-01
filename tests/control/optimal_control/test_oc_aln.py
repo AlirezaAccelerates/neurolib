@@ -102,7 +102,7 @@ def getstate(model):
 
 class TestALN(unittest.TestCase):
     """
-    Test wc in neurolib/optimal_control/
+    Test aln in neurolib/optimal_control/
     """
 
     # tests if the control from OC computation coincides with a random input used for target forward-simulation

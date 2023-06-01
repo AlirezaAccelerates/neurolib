@@ -1,10 +1,8 @@
 from neurolib.control.optimal_control.oc import OC, update_control_with_limit
-from neurolib.control.optimal_control import cost_functions
 import numpy as np
 import numba
 from neurolib.models.aln.timeIntegration import (
     compute_hx,
-    compute_nw_input,
     compute_hx_nw,
     Duh,
     Dxdoth,
@@ -79,6 +77,7 @@ class OcAln(OC):
 
         if self.model.params.filter_sigma:
             print("NOT IMPLEMENTED FOR FILTER_SIGMA=TRUE")
+            raise NotImplementedError
 
         self.ndt_de = np.around(self.model.params.de / self.dt).astype(int)
         self.ndt_di = np.around(self.model.params.di / self.dt).astype(int)

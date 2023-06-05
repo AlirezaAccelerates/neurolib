@@ -262,9 +262,13 @@ def solve_adjoint(hx_list, del_list, hx_nw, fx, state_dim, dt, N, T, dmat_ndt, d
         for k in range(state_dim[1]):
             if dxdoth[n, k, k] == 0:
                 adjoint_state[n, k, -1] = -fx_fullstate[n, k, -1]
-            else:
+            elif dxdoth[n, k, k] == 1:
                 if model_name == "aln":
                     adjoint_state[n, k, -1] = -dt * fx_fullstate[n, k, -1]
+            else:
+                print("WARNING: Case dh_dxdot != 0 or 1 not implemented")
+                raise NotImplementedError
+                
 
     for t in range(T - 2, -1, -1):  # backwards iteration including 0th index
         if t == 0:
@@ -276,43 +280,91 @@ def solve_adjoint(hx_list, del_list, hx_nw, fx, state_dim, dt, N, T, dmat_ndt, d
                 if dxdoth[n, k, k] == 0:
 
                     res = fx_fullstate[n, k, t]
-
-                    for hx, int_delay in zip(hx_list, del_list):
-                        if t + 1 + int_delay < T:
-                            for i in range(state_dim[1]):
-                                res += adjoint_state[n, i, t + 1 + int_delay] * hx[n, t + 1 + int_delay, i, k]
-
-                    for n2 in range(N):  # iterate through connectivity of current node "n"
-                        if t + 1 + dmat_ndt[n2, n] < T:
-                            for i in range(state_dim[1]):
-                                res += (
-                                    adjoint_state[n2, i, t + 1 + dmat_ndt[n2, n]]
-                                    * hx_nw[n2, n, t + 1 + dmat_ndt[n2, n], i, k]
-                                )
+                    res += adjoint_input(hx_list, del_list, t, T, state_dim[1], adjoint_state)
+                    res += adjoint_nw_input(N, n, dmat_ndt, t, T, state_dim[1], adjoint_state, hx_nw)
 
                     adjoint_state[n, k, t] = -res
 
-                elif dxdoth[n, k, k] != 0:
+                elif dxdoth[n, k, k] == 1:
                     # differences in "IA" state need to be passed to the same time step of the adjoint state
                     if model_name == "aln":
                         der = fx_fullstate[n, k, t]
                     else:
                         der = fx_fullstate[n, k, t + 1]
-                    for i in range(state_dim[1]):
-                        for hx, int_delay in zip(hx_list, del_list):
-                            if t + 1 + int_delay < T:
-                                der += adjoint_state[n, i, t + 1 + int_delay] * hx[n, t + 1 + int_delay, i, k]
-
-                    for n2 in range(N):  # iterate through connectivity of current node "n"
-                        if t + 1 + dmat_ndt[n2, n] <= T - 2:
-                            for i in range(state_dim[1]):
-                                der += (
-                                    adjoint_state[n2, i, t + 1 + dmat_ndt[n2, n]]
-                                    * hx_nw[n2, n, t + 1 + dmat_ndt[n2, n], i, k]
-                                )
+                                
+                    der += adjoint_input(hx_list, del_list, t, T, state_dim[1], adjoint_state)
+                    der += adjoint_nw_input(N, n, dmat_ndt, t, T - 1, state_dim[1], adjoint_state, hx_nw)
+                    
                     adjoint_state[n, k, t] = adjoint_state[n, k, t + 1] - dt * der
+                    
+                else:
+                    print("WARNING: Case dh_dxdot != 0 or 1 not implemented")
+                    raise NotImplementedError
+                    
 
     return adjoint_state
+
+@numba.njit
+def adjoint_input(hx_list, del_list, t, T_lim, state_dim1, as):
+    """Compute input to adjoint state for backwards integration
+
+    :param hx_list:     list of Jacobians of systems dynamics wrt. 'state_vars'
+    :type hx_list:      list of np.ndarray
+    :param del_list:    list of respective time delay integer
+    :type del_list:     list of int
+    :param t:           current time index
+    :type t:            int
+    :param T_lim:       Maximum time index
+    :type T_lim:        int
+    :param state_dim1:  Number of state variables (V)
+    :type state_dim1:   int
+    :param as:          adjoint state
+    :type as:           np.ndarray
+    
+    :return:            Adjoint state input
+    :rtype:             float
+    """
+    result = 0.0
+    for hx, int_delay in zip(hx_list, del_list):
+        if t + 1 + int_delay < T_lim:
+            for i in range(state_dim1):
+                result += as[n, i, t + 1 + int_delay] * hx[n, t + 1 + int_delay, i, k]
+    return result
+
+
+@numba.njit
+def adjoint_nw_input(N, n, dmat_ndt, t, T_lim, state_dim1, as, hxnw):
+    """Compute input to adjoint state from network connections for backwards integration
+
+    :param N:           Number of nodes in the network.
+    :type N:            int
+    :param n:           current node index
+    :type n:            int
+    :param dmat_ndt:    N x N delay matrix (discrete number of delayed time-intervals).
+    :type dmat_ndt:     np.ndarray
+    :param t:           current time index
+    :type t:            int
+    :param T_lim:       Maximum time index
+    :type T_lim:        int
+    :param state_dim1:  Number of state variables (V)
+    :type state_dim1:   int
+    :param as:          adjoint state
+    :type as:           np.ndarray
+    :param hxnw:        Jacobians for each time step for the network coupling.
+    :type hx_w:         np.ndarray
+    
+    :return:            Adjoint state input
+    :rtype:             float
+    """
+    result = 0.0
+    for n2 in range(N):  # iterate through connectivity of current node "n"
+        if t + 1 + dmat_ndt[n2, n] < T_lim:
+            for i in range(state_dim1):
+                result += (
+                    as[n2, i, t + 1 + dmat_ndt[n2, n]]
+                    * hxnw[n2, n, t + 1 + dmat_ndt[n2, n], i, k]
+                )
+    return result
 
 
 @numba.njit
